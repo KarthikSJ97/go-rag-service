@@ -21,7 +21,7 @@ type QueryRequest struct {
 type QueryResponse struct {
 	Query          string   `json:"query"`
 	Answer         string   `json:"answer"`
-	MatchedChunks  []string `json:"matched_chunks"`
+	MatchedChunksCount  int `json:"matched_chunks_count"`
 	ProcessingTime string   `json:"processing_time"`
 }
 
@@ -131,7 +131,7 @@ func RegisterRoutes(app *fiber.App, container *service.Container) {
 		return c.Status(fiber.StatusOK).JSON(QueryResponse{
 			Query:          req.Query,
 			Answer:         answer,
-			MatchedChunks:  retrievedContexts,
+			MatchedChunksCount:  len(retrievedContexts),
 			ProcessingTime: time.Since(start).String(),
 		})
 	})
