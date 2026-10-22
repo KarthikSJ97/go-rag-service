@@ -21,7 +21,7 @@ type EmbeddingRequest struct {
 }
 
 type EmbeddingResponse struct {
-	Embedding []float32 `json:"embedding"`
+    Embeddings [][]float32 `json:"embeddings"`
 }
 
 type GenerateRequest struct {
@@ -46,30 +46,34 @@ func NewOllamaClient(baseURL string, embModel string, llmModel string) *OllamaCl
 }
 
 func (c *OllamaClient) GetEmbedding(text string) ([]float32, error) {
-	reqBody, err := json.Marshal(EmbeddingRequest{
-		Model: c.EmbModel,
-		Input: text,
-	})
-	if err != nil {
-		return nil, err
-	}
+    reqBody, err := json.Marshal(EmbeddingRequest{
+        Model: c.EmbModel,
+        Input: text,
+    })
+    if err != nil {
+        return nil, err
+    }
 
-	resp, err := c.httpClient.Post(c.baseURL+"/api/embed", "application/json", bytes.NewBuffer(reqBody))
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+    resp, err := c.httpClient.Post(c.baseURL+"/api/embed", "application/json", bytes.NewBuffer(reqBody))
+    if err != nil {
+        return nil, err
+    }
+    defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ollama returned non-200 code: %d", resp.StatusCode)
-	}
+    if resp.StatusCode != http.StatusOK {
+        return nil, fmt.Errorf("ollama returned non-200 code: %d", resp.StatusCode)
+    }
 
-	var result EmbeddingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
+    var result EmbeddingResponse
+    if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+        return nil, err
+    }
 
-	return result.Embedding, nil
+    if len(result.Embeddings) == 0 {
+        return nil, fmt.Errorf("no embeddings returned from ollama")
+    }
+
+    return result.Embeddings[0], nil
 }
 
 func (c *OllamaClient) GenerateAnswer(prompt string) (string, error) {

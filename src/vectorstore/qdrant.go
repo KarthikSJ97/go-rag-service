@@ -77,22 +77,22 @@ func (vs *VectorStore) UpsertChunks(ctx context.Context, chunks []string, embedd
 }
 
 func (vs *VectorStore) Search(ctx context.Context, queryVector []float32, topK uint64) ([]string, error) {
-	searchResult, err := vs.client.Query(ctx, &qdrant.QueryPoints{
-		CollectionName: vs.collection,
-		Query:          qdrant.NewQuery(queryVector...),
-		Limit:          &topK,
-		WithPayload:    qdrant.NewWithPayload(true),
-	})
-	if err != nil {
-		return nil, err
-	}
+    searchResult, err := vs.client.Query(ctx, &qdrant.QueryPoints{
+        CollectionName: vs.collection,
+        Query:          qdrant.NewQueryDense(queryVector),
+        Limit:          &topK,
+        WithPayload:    qdrant.NewWithPayload(true),
+    })
+    if err != nil {
+        return nil, err
+    }
 
-	var contextChunks []string
-	for _, point := range searchResult {
-		if textVal, ok := point.Payload["text"]; ok {
-			contextChunks = append(contextChunks, textVal.GetStringValue())
-		}
-	}
+    var contextChunks []string
+    for _, point := range searchResult {
+        if textVal, ok := point.Payload["text"]; ok {
+            contextChunks = append(contextChunks, textVal.GetStringValue())
+        }
+    }
 
-	return contextChunks, nil
+    return contextChunks, nil
 }

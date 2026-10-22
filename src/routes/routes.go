@@ -106,6 +106,7 @@ func RegisterRoutes(app *fiber.App, container *service.Container) {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Query embedding failed: %v", err)})
 		}
 
+		fmt.Printf("Query vector length: %d\n", len(queryVector))
 		retrievedContexts, err := container.Store.Search(c.Context(), queryVector, req.TopK)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Vector search failed: %v", err)})
