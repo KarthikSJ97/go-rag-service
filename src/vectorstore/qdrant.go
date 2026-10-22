@@ -14,6 +14,13 @@ type VectorStore struct {
 	collection string
 }
 
+type DocumentMetadata struct {
+	DocumentID   string `json:"document_id"`
+	DocumentName string `json:"document_name"`
+	DocumentSize int64  `json:"document_size"`
+	ChunksCount  int    `json:"chunks_count"`
+}
+
 func NewVectorStore(host string, port int, collection string) (*VectorStore, error) {
 	client, err := qdrant.NewClient(&qdrant.Config{
 		Host: host,
@@ -54,7 +61,7 @@ func (vs *VectorStore) EnsureCollection(ctx context.Context, vectorSize uint64) 
 	return nil
 }
 
-func (vs *VectorStore) UpsertChunks(ctx context.Context, chunks []string, embeddings [][]float32, documentID string) error {
+func (vs *VectorStore) UpsertChunks(ctx context.Context, chunks []string, embeddings [][]float32, documentID string, documentName string, documentSize int64) error {
 	var points []*qdrant.PointStruct
 
 	for i, chunk := range chunks {
@@ -63,8 +70,10 @@ func (vs *VectorStore) UpsertChunks(ctx context.Context, chunks []string, embedd
 			Id:      qdrant.NewIDUUID(pointID),
 			Vectors: qdrant.NewVectors(embeddings[i]...),
 			Payload: qdrant.NewValueMap(map[string]any{
-				"text":        chunk,
-				"document_id": documentID,
+				"text":          chunk,
+				"document_id":   documentID,
+				"document_name": documentName,
+				"document_size": documentSize,
 			}),
 		})
 	}
@@ -77,34 +86,96 @@ func (vs *VectorStore) UpsertChunks(ctx context.Context, chunks []string, embedd
 }
 
 func (vs *VectorStore) Search(ctx context.Context, queryVector []float32, topK uint64, documentIDs []string) ([]string, error) {
-    var filter *qdrant.Filter
-    if len(documentIDs) > 0 {
-        conditions := make([]*qdrant.Condition, len(documentIDs))
-        for i, id := range documentIDs {
-            conditions[i] = qdrant.NewMatch("document_id", id)
-        }
-        filter = &qdrant.Filter{
-            Should: conditions,
-        }
-    }
+	var filter *qdrant.Filter
+	if len(documentIDs) > 0 {
+		conditions := make([]*qdrant.Condition, len(documentIDs))
+		for i, id := range documentIDs {
+			conditions[i] = qdrant.NewMatch("document_id", id)
+		}
+		filter = &qdrant.Filter{
+			Should: conditions,
+		}
+	}
 
-    searchResult, err := vs.client.Query(ctx, &qdrant.QueryPoints{
-        CollectionName: vs.collection,
-        Query:          qdrant.NewQueryDense(queryVector),
-        Filter:         filter,
-        Limit:          &topK,
-        WithPayload:    qdrant.NewWithPayload(true),
-    })
-    if err != nil {
-        return nil, err
-    }
+	searchResult, err := vs.client.Query(ctx, &qdrant.QueryPoints{
+		CollectionName: vs.collection,
+		Query:          qdrant.NewQueryDense(queryVector),
+		Filter:         filter,
+		Limit:          &topK,
+		WithPayload:    qdrant.NewWithPayload(true),
+	})
+	if err != nil {
+		return nil, err
+	}
 
-    var contextChunks []string
-    for _, point := range searchResult {
-        if textVal, ok := point.Payload["text"]; ok {
-            contextChunks = append(contextChunks, textVal.GetStringValue())
-        }
-    }
+	var contextChunks []string
+	for _, point := range searchResult {
+		if textVal, ok := point.Payload["text"]; ok {
+			contextChunks = append(contextChunks, textVal.GetStringValue())
+		}
+	}
 
-    return contextChunks, nil
+	return contextChunks, nil
+}
+
+// ListDocuments scrolls through points to aggregate unique document IDs and chunk counts
+func (vs *VectorStore) ListDocuments(ctx context.Context) ([]DocumentMetadata, error) {
+	scrollResult, err := vs.client.Scroll(ctx, &qdrant.ScrollPoints{
+		CollectionName: vs.collection,
+		WithPayload:    qdrant.NewWithPayload(true),
+		Limit:          qdrant.PtrOf(uint32(10000)),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	docCounts := make(map[string]int)
+	docNames := make(map[string]string)
+	docSizes := make(map[string]int64)
+
+	for _, point := range scrollResult {
+		if val, ok := point.Payload["document_id"]; ok {
+			docID := val.GetStringValue()
+			if docID != "" {
+				docCounts[docID]++
+				if nameVal, ok := point.Payload["document_name"]; ok {
+					docNames[docID] = nameVal.GetStringValue()
+				}
+				if sizeVal, ok := point.Payload["document_size"]; ok {
+					docSizes[docID] = sizeVal.GetIntegerValue()
+				}
+			}
+		}
+	}
+
+	var documents []DocumentMetadata
+	for docID, count := range docCounts {
+		name := docNames[docID]
+		if name == "" {
+			name = "Unknown"
+		}
+		documents = append(documents, DocumentMetadata{
+			DocumentID:   docID,
+			DocumentName: name,
+			DocumentSize: docSizes[docID],
+			ChunksCount:  count,
+		})
+	}
+
+	return documents, nil
+}
+
+// DeleteByDocumentID deletes all vector points matching the given document ID filter
+func (vs *VectorStore) DeleteByDocumentID(ctx context.Context, documentID string) error {
+	_, err := vs.client.Delete(ctx, &qdrant.DeletePoints{
+		CollectionName: vs.collection,
+		Points: qdrant.NewPointsSelectorFilter(
+			&qdrant.Filter{
+				Must: []*qdrant.Condition{
+					qdrant.NewMatch("document_id", documentID),
+				},
+			},
+		),
+	})
+	return err
 }

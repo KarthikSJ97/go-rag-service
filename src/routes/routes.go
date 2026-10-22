@@ -79,7 +79,9 @@ func RegisterRoutes(app *fiber.App, container *service.Container) {
 		}
 
 		docID := uuid.New().String()
-		if err := container.Store.UpsertChunks(c.Context(), chunks, embeddings, docID); err != nil {
+		fileName := file.Filename
+		fileSize := file.Size
+		if err := container.Store.UpsertChunks(c.Context(), chunks, embeddings, docID, fileName, fileSize); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to store vectors: %v", err)})
 		}
 
@@ -133,6 +135,34 @@ func RegisterRoutes(app *fiber.App, container *service.Container) {
 			Answer:         answer,
 			MatchedChunksCount:  len(retrievedContexts),
 			ProcessingTime: time.Since(start).String(),
+		})
+	})
+
+	// 3. List Ingested Documents Endpoint
+	api.Get("/documents", func(c *fiber.Ctx) error {
+		docs, err := container.Store.ListDocuments(c.Context())
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to list documents: %v", err)})
+		}
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"documents": docs,
+		})
+	})
+
+	// 4. Delete Vectors by Document ID Endpoint
+	api.Delete("/documents/:id", func(c *fiber.Ctx) error {
+		docID := c.Params("id")
+		if strings.TrimSpace(docID) == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing document ID parameter"})
+		}
+
+		if err := container.Store.DeleteByDocumentID(c.Context(), docID); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Failed to delete document vectors: %v", err)})
+		}
+
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message":     "Document vectors deleted successfully",
+			"document_id": docID,
 		})
 	})
 }
