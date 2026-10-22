@@ -32,6 +32,6 @@ func main() {
 	routes.RegisterRoutes(app, container)
 
 	// 5. Start Server
-	log.Printf("RAG Web Service listening on port %s...", cfg.Port)
+	log.Printf("RAG Web Service listening on port %v...", cfg.Port)
 	log.Fatal(app.Listen(":" + strconv.Itoa(cfg.Port)))
 }

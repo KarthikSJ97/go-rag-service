@@ -1,0 +1,7 @@
+.env
+docker-compose.yml
+.git
+.gitignore
+README.md
+LICENSE
+bin/
