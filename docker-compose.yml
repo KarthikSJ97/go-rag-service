@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.9.2
+    container_name: rag_qdrant
+    ports:
+      - "${QDRANT_PORT:-6334}:${QDRANT_PORT:-6334}"
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rag_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: always
+
+  ollama-model-puller:
+    image: curlimages/curl:latest
+    container_name: rag_ollama_puller
+    depends_on:
+      - ollama
+    env_file:
+      - .env
+    entrypoint: >
+      /bin/sh -c "
+      echo 'Waiting for Ollama service...';
+      while ! curl -s http://ollama:11434/api/tags > /dev/null; do sleep 2; done;
+      echo 'Downloading Embedding Model ($${OLLAMA_EMB_MODEL})...';
+      curl -X POST http://ollama:11434/api/pull -d '{\"model\": \"$${OLLAMA_EMB_MODEL}\"}';
+      echo 'Downloading LLM Model ($${OLLAMA_LLM_MODEL})...';
+      curl -X POST http://ollama:11434/api/pull -d '{\"model\": \"$${OLLAMA_LLM_MODEL}\"}';
+      echo 'Models initialization finished!';
+      "
+
+  rag-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_go_api
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    env_file:
+      - .env
+    environment:
+      # Override hostnames for Docker internal bridge network communication
+      - QDRANT_HOST=qdrant
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+      ollama-model-puller:
+        condition: service_completed_successfully
+
+volumes:
+  qdrant_data:
+  ollama_data:
