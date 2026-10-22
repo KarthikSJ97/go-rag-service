@@ -10,6 +10,7 @@ import (
 
 type Config struct {
 	Port                 int
+	MaxPayloadSizeInMB   int
 	QdrantHost           string
 	QdrantPort           int
 	QdrantCollectionName string
@@ -29,6 +30,7 @@ func LoadConfig() *Config {
 
 	return &Config{
 		Port:                 getEnvInt("PORT", 8080),
+		MaxPayloadSizeInMB:   getEnvInt("MAX_PAYLOAD_SIZE_IN_MB", 20),
 		QdrantHost:           getEnvString("QDRANT_HOST", "localhost"),
 		QdrantPort:           getEnvInt("QDRANT_PORT", 6334),
 		QdrantCollectionName: getEnvString("QDRANT_COLLECTION_NAME", "rag_documents"),
