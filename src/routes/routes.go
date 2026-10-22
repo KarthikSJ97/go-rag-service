@@ -15,6 +15,7 @@ import (
 type QueryRequest struct {
 	Query string `json:"query"`
 	TopK  uint64 `json:"top_k"`
+	DocumentIDs []string `json:"document_ids"`
 }
 
 type QueryResponse struct {
@@ -107,7 +108,7 @@ func RegisterRoutes(app *fiber.App, container *service.Container) {
 		}
 
 		fmt.Printf("Query vector length: %d\n", len(queryVector))
-		retrievedContexts, err := container.Store.Search(c.Context(), queryVector, req.TopK)
+		retrievedContexts, err := container.Store.Search(c.Context(), queryVector, req.TopK, req.DocumentIDs)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": fmt.Sprintf("Vector search failed: %v", err)})
 		}

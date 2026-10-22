@@ -76,10 +76,22 @@ func (vs *VectorStore) UpsertChunks(ctx context.Context, chunks []string, embedd
 	return err
 }
 
-func (vs *VectorStore) Search(ctx context.Context, queryVector []float32, topK uint64) ([]string, error) {
+func (vs *VectorStore) Search(ctx context.Context, queryVector []float32, topK uint64, documentIDs []string) ([]string, error) {
+    var filter *qdrant.Filter
+    if len(documentIDs) > 0 {
+        conditions := make([]*qdrant.Condition, len(documentIDs))
+        for i, id := range documentIDs {
+            conditions[i] = qdrant.NewMatch("document_id", id)
+        }
+        filter = &qdrant.Filter{
+            Should: conditions,
+        }
+    }
+
     searchResult, err := vs.client.Query(ctx, &qdrant.QueryPoints{
         CollectionName: vs.collection,
         Query:          qdrant.NewQueryDense(queryVector),
+        Filter:         filter,
         Limit:          &topK,
         WithPayload:    qdrant.NewWithPayload(true),
     })
