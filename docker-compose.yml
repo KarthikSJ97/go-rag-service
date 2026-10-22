@@ -1,6 +1,6 @@
 services:
   qdrant:
-    image: qdrant/qdrant:v1.9.2
+    image: qdrant/qdrant:latest
     container_name: rag_qdrant
     ports:
       - "6333:6333"
@@ -35,13 +35,16 @@ services:
       - OLLAMA_LLM_MODEL=${OLLAMA_LLM_MODEL}
     entrypoint: >
       /bin/sh -c "
-      echo 'Waiting for Ollama service...';
-      while ! curl -s http://ollama:11434/api/tags > /dev/null; do sleep 2; done;
-      echo 'Downloading Embedding Model ($OLLAMA_EMB_MODEL)...';
-      curl -X POST http://ollama:11434/api/pull -d '{\"model\": \"$OLLAMA_EMB_MODEL\"}';
+      echo 'Waiting for Ollama service to be fully responsive...';
+      until curl -s http://ollama:11434/api/tags > /dev/null; do sleep 3; done;
+      
       echo 'Downloading LLM Model ($OLLAMA_LLM_MODEL)...';
-      curl -X POST http://ollama:11434/api/pull -d '{\"model\": \"$OLLAMA_LLM_MODEL\"}';
-      echo 'Models initialization finished!';
+      curl -f -X POST http://ollama:11434/api/pull -d '{\"model\": \"$OLLAMA_LLM_MODEL\"}' || exit 1;
+      
+      echo 'Downloading Embedding Model ($OLLAMA_EMB_MODEL)...';
+      curl -f -X POST http://ollama:11434/api/pull -d '{\"model\": \"$OLLAMA_EMB_MODEL\"}' || exit 1;
+      
+      echo 'Models initialization finished successfully!';
       "
 
   rag-api:
